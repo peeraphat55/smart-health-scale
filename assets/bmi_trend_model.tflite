@@ -1,0 +1,66 @@
+import sys
+import numpy as np
+sys.stdout.reconfigure(encoding='utf-8')
+from sklearn.linear_model import LinearRegression
+
+# --- 1. ข้อมูล BMI ของคุณย้อนหลัง 12 เดือน (สมมุติ) ---
+# เดือนที่ 1 ถึง 10 (X = เวลา)
+months = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).reshape(-1, 1)
+
+# ค่า BMI ที่วัดได้จริงในแต่ละเดือน (y = ค่า BMI)
+# ลองแก้เลขตรงนี้ตามจริงได้เลยครับ
+bmi_history = np.array([21.5, 21.6, 21.8, 22.0, 22.3, 22.5, 22.8, 23.1, 23.4, 23.8,23.8,24.0])
+
+# --- 2. ให้ AI วิเคราะห์แนวโน้ม (Trend Analysis) ---
+model = LinearRegression()
+model.fit(months, bmi_history)
+
+# ค่าความชัน (Slope): บอกอัตราการเปลี่ยนแปลงต่อเดือน
+trend_slope = model.coef_[0]
+current_bmi = bmi_history[-1] # ค่าเดือนล่าสุด
+
+# ทำนายอนาคตเดือนที่ 11
+next_month_prediction = model.predict([[13]])[0]
+
+# --- 3. ระบบตัดสินใจและให้คำแนะนำ (Logic & Rules) ---
+print(f"--- ผลการวิเคราะห์ BMI 12 เดือนล่าสุด ---")
+print(f"BMI ปัจจุบัน: {current_bmi:.2f}")
+print(f"แนวโน้ม (Slope): {trend_slope:.4f} (การเปลี่ยนแปลงต่อเดือน)")
+
+# วิเคราะห์สถานะปัจจุบัน (อ้างอิงเกณฑ์เอเชีย)
+status = ""
+if current_bmi < 18.5:
+    status = "ผอมเกินไป"
+elif 18.5 <= current_bmi <= 22.9:
+    status = "สมส่วน (ปกติ)"
+elif 23.0 <= current_bmi <= 24.9:
+    status = "น้ำหนักเกิน (ท้วม)"
+elif 25.0 <= current_bmi <= 29.9:
+    status = "อ้วนระดับ 1"
+else:
+    status = "อ้วนระดับ 2"
+
+print(f"รูปร่างปัจจุบัน: {status}")
+
+# วิเคราะห์แนวโน้ม (AI Part)
+print("\n--- คำแนะนำจาก AI ---")
+
+if trend_slope > 0.1:
+    print("⚠️ แนวโน้ม: 'กราฟพุ่งขึ้น' (คุณกำลังอ้วนขึ้นไว)")
+    if current_bmi >= 23:
+        print("คำแนะนำ: ควรเริ่มคุมอาหารและออกกำลังกายทันที เพราะแนวโน้มกำลังเข้าสู่ภาวะอ้วน")
+    else:
+        print("คำแนะนำ: ตอนนี้ยังไม่อ้วน แต่กราฟกำลังขึ้น ระวังการกินของหวาน/ของมัน")
+
+elif trend_slope < -0.1:
+    print("📉 แนวโน้ม: 'กราฟดิ่งลง' (น้ำหนักลดลงไว)")
+    if current_bmi < 18.5:
+        print("คำแนะนำ: อันตราย! คุณผอมอยู่แล้วและน้ำหนักยังลดลงอีก ควรเพิ่มโปรตีนและแป้ง")
+    else:
+        print("คำแนะนำ: มาถูกทางแล้ว! (ถ้าคุณตั้งใจลดน้ำหนัก)")
+
+else:
+    print("➡️ แนวโน้ม: 'คงที่' (น้ำหนักค่อนข้างนิ่ง)")
+    print("คำแนะนำ: รักษาสุขภาพแบบนี้ต่อไป")
+
+print(f"\n🔮 AI คาดการณ์เดือนหน้า (เดือนที่ 13): BMI น่าจะอยู่ที่ประมาณ {next_month_prediction:.2f}")

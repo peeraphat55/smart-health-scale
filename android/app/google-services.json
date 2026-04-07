@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "814242481977",
+    "firebase_url": "https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "realtime-34e55",
+    "storage_bucket": "realtime-34e55.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:814242481977:android:d0df5219b8e83b02330ae8",
+        "android_client_info": {
+          "package_name": "com.example.project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYzLGitsMgYdJ3dJhAdQyzj59UAFsWzM0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
