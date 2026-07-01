@@ -25,7 +25,10 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
         return windows;
       case TargetPlatform.linux:
@@ -41,53 +44,39 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDiapQyv97CPMj_iQ7KJGG39LkhhraXWmM',
-    appId: '1:814242481977:web:d2af1bd3e7ffef31330ae8',
-    messagingSenderId: '814242481977',
-    projectId: 'realtime-34e55',
-    authDomain: 'realtime-34e55.firebaseapp.com',
-    databaseURL: 'https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'realtime-34e55.firebasestorage.app',
-    measurementId: 'G-SXS30V3MNY',
+    apiKey: 'AIzaSyDdb49LZYoZpzHpW6X_pKO3VFhm7bLWRz4',
+    appId: '1:164097534241:web:9de7248bd32b37c1a8b660',
+    messagingSenderId: '164097534241',
+    projectId: 'smart-health-scale',
+    authDomain: 'smart-health-scale.firebaseapp.com',
+    storageBucket: 'smart-health-scale.firebasestorage.app',
+    measurementId: 'G-MNXSL57P4Y',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAYzLGitsMgYdJ3dJhAdQyzj59UAFsWzM0',
-    appId: '1:814242481977:android:d0df5219b8e83b02330ae8',
-    messagingSenderId: '814242481977',
-    projectId: 'realtime-34e55',
-    databaseURL: 'https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'realtime-34e55.firebasestorage.app',
+    apiKey: 'AIzaSyBzDbyMiz_ty5U6HG8NcrboslLkmXiy6bM',
+    appId: '1:164097534241:android:64f639cbf5b7d067a8b660',
+    messagingSenderId: '164097534241',
+    projectId: 'smart-health-scale',
+    storageBucket: 'smart-health-scale.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCBJV0iOau7EK5lRZRjiZcSv1-S8ydTtTo',
-    appId: '1:814242481977:ios:9cf8965eec05b0b4330ae8',
-    messagingSenderId: '814242481977',
-    projectId: 'realtime-34e55',
-    databaseURL: 'https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'realtime-34e55.firebasestorage.app',
-    iosBundleId: 'com.example.project',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCBJV0iOau7EK5lRZRjiZcSv1-S8ydTtTo',
-    appId: '1:814242481977:ios:9cf8965eec05b0b4330ae8',
-    messagingSenderId: '814242481977',
-    projectId: 'realtime-34e55',
-    databaseURL: 'https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'realtime-34e55.firebasestorage.app',
+    apiKey: 'AIzaSyBy0psd64RuzsYGeTf7xe2BniTE4V2T1yg',
+    appId: '1:164097534241:ios:476419ddd3660048a8b660',
+    messagingSenderId: '164097534241',
+    projectId: 'smart-health-scale',
+    storageBucket: 'smart-health-scale.firebasestorage.app',
     iosBundleId: 'com.example.project',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDiapQyv97CPMj_iQ7KJGG39LkhhraXWmM',
-    appId: '1:814242481977:web:e71eb9ae43ead8c5330ae8',
-    messagingSenderId: '814242481977',
-    projectId: 'realtime-34e55',
-    authDomain: 'realtime-34e55.firebaseapp.com',
-    databaseURL: 'https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'realtime-34e55.firebasestorage.app',
-    measurementId: 'G-0J301CVTY6',
+    apiKey: 'AIzaSyDdb49LZYoZpzHpW6X_pKO3VFhm7bLWRz4',
+    appId: '1:164097534241:web:c260d23deb650f17a8b660',
+    messagingSenderId: '164097534241',
+    projectId: 'smart-health-scale',
+    authDomain: 'smart-health-scale.firebaseapp.com',
+    storageBucket: 'smart-health-scale.firebasestorage.app',
+    measurementId: 'G-T4X1053DZ8',
   );
 }

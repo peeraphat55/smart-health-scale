@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BmiRecord {
   final String? key; 
@@ -157,16 +158,30 @@ class WeightProvider with ChangeNotifier {
   }
 
   Future<void> saveCurrentData() async {
-    if (_currentWeight == 0) return;
-    final newRecord = {
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'weight': _currentWeight,
-      'height': _heightCm,
-      'heartRate': _currentHeartRate,
-      'bmi': bmi,
-      'status': bodyStatus,
-    };
-    await _historyRef.push().set(newRecord);
+    // ถ้าน้ำหนักเป็น 0 (ยังไม่ได้ชั่ง) จะไม่บันทึก
+    if (_currentWeight == 0) return; 
+
+    // ชี้เป้าหมายไปที่ Collection: measurements ใน Firestore
+    CollectionReference measurements = FirebaseFirestore.instance.collection('measurements');
+
+    try {
+      // สั่งบันทึกข้อมูลโดยดึงค่าจากตัวแปรใน Provider มาใช้โดยตรง
+      await measurements.add({
+        'user_id': 'UID_TEST_01', // เดี๋ยวเราค่อยมาแก้ตรงนี้ตอนทำระบบ Login 
+        'device_id': 'DEVICE_01',
+        'weight': _currentWeight,
+        'height': _heightCm,
+        'heart_rate': _currentHeartRate,
+        'bmi': bmi,
+        'body_type': bodyStatus,
+        'measured_at': FieldValue.serverTimestamp(), // ประทับเวลาของเซิร์ฟเวอร์
+      });
+      
+      print("✅ บันทึกข้อมูลลง Firestore สำเร็จ!");
+      
+    } catch (e) {
+      print("❌ เกิดข้อผิดพลาดในการบันทึก: $e");
+    }
   }
 
   Future<void> deleteRecord(int index) async {
