@@ -84,10 +84,13 @@ class HomePage extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  
+
                   // ปุ่ม Connect แบบดั้งเดิม (ปุ่มประดับ UI)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.all(Radius.circular(30)),
@@ -146,10 +149,23 @@ class HomePage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed: () {
-                    weightData.saveCurrentData();
+                  onPressed: () async {
+                    // 1. เช็กก่อนเลยว่าน้ำหนักเป็น 0 ไหม
+                    if (weightData.currentWeight == 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('❌ ไม่สามารถบันทึกได้!'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return; // สั่งหยุดทำงานทันที
+                    }
+                    await weightData.saveCurrentData();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('บันทึกข้อมูลเรียบร้อย!')),
+                      const SnackBar(
+                        content: Text('✅ บันทึกข้อมูลลงฐานข้อมูลเรียบร้อย!'),
+                        backgroundColor: Colors.green,
+                      ),
                     );
                   },
                   child: const Text(

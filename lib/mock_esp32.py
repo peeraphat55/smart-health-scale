@@ -1,40 +1,27 @@
-import sys
-import requests
 import time
+import requests
 import random
 
-sys.stdout.reconfigure(encoding='utf-8')
-# ⚠️ URL เดิมของคุณ
-FIREBASE_URL = "https://realtime-34e55-default-rtdb.asia-southeast1.firebasedatabase.app/smart_scale.json"
+# ก๊อปปี้ URL ของ Realtime Database จากหน้าเว็บ Firebase มาใส่ตรงนี้
+# (เช่น https://smart-health-scale-default-rtdb.asia-southeast1.firebasedatabase.app)
+DATABASE_URL = "https://ใส่-URL-ฐานข้อมูลของคุณตรงนี้.firebasedatabase.app"
 
-print("เริ่มจำลองการส่งข้อมูลเครื่องชั่งน้ำหนักและ Heart Rate...")
-
-loop_count = 0
-current_hr = 205 # ค่าเริ่มต้น
-
-try:
-    while True:
-        # 1. สุ่มน้ำหนักทุกๆ 2 วินาที (เหมือนเดิม)
-        weight = round(random.uniform(50.0, 70.0), 1)
-        data = {"current_weight": weight}
+print("🚀 กำลังจำลองการทำงานของเครื่องชั่ง ESP32...")
+while True:
+    # สุ่มน้ำหนักและชีพจร
+    mock_weight = round(random.uniform(60.0, 65.0), 1)
+    mock_hr = random.randint(75, 90)
+    
+    data = {
+        "current_weight": mock_weight,
+        "current_heart_rate": mock_hr
+    }
+    
+    try:
+        # ส่งค่าไปที่ Firebase
+        requests.put(f"{DATABASE_URL}/smart_scale.json", json=data)
+        print(f"📡 ส่งข้อมูลแล้ว: น้ำหนัก {mock_weight} Kg, ชีพจร {mock_hr} BPM")
+    except Exception as e:
+        print("❌ ส่งข้อมูลไม่สำเร็จ:", e)
         
-        # 2. เช็คว่าครบ 30 รอบ (60 วินาที) หรือยัง ถ้าครบให้สุ่ม Heart Rate ใหม่
-        if loop_count % 30 == 0:
-            current_hr = random.randint(200, 230)
-            data["current_heart_rate"] = current_hr
-            print(f"❤️ อัปเดต Heart Rate: {current_hr} BPM")
-            
-        # 3. ส่งข้อมูลไปอัปเดตที่ Firebase
-        response = requests.patch(FIREBASE_URL, json=data)
-        
-        if response.status_code == 200:
-            print(f"ส่งข้อมูลสำเร็จ: Weight {weight} Kg")
-        else:
-            print(f"เกิดข้อผิดพลาด: {response.text}")
-            
-        # เพิ่มตัวนับรอบ และหน่วงเวลา 2 วินาที
-        loop_count += 1
-        time.sleep(2)
-
-except KeyboardInterrupt:
-    print("\nหยุดการจำลองข้อมูล")
+    time.sleep(3) # ส่งข้อมูลทุกๆ 3 วินาที
