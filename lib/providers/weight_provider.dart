@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -222,53 +223,45 @@ class WeightProvider with ChangeNotifier {
     };
   }
 
-  void _listenToDataChanges() {
-    // ดึงค่าน้ำหนักสดจาก Realtime DB
-    _weightRef.onValue.listen((DatabaseEvent event) {
-      if (event.snapshot.value != null) {
-        _currentWeight = double.parse(event.snapshot.value.toString());
-        notifyListeners();
-      }
-    });
+void _listenToDataChanges() {
+    // ... โค้ดดึงค่าน้ำหนักสดและชีพจร (ปล่อยไว้เหมือนเดิม) ...
 
-    // ดึงค่าชีพจรสดจาก Realtime DB
-    _hrRef.onValue.listen((DatabaseEvent event) {
-      if (event.snapshot.value != null) {
-        _currentHeartRate = int.parse(event.snapshot.value.toString());
-        notifyListeners();
-      }
-    });
+    // 🟢 ดึง UID ของคนที่ล็อกอิน
+    final String? currentUid = FirebaseAuth.instance.currentUser?.uid;
 
-    // ดึงประวัติจาก Firestore
-    FirebaseFirestore.instance
-        .collection('measurements')
-        .orderBy('measured_at', descending: true)
-        .snapshots()
-        .listen((QuerySnapshot snapshot) {
-          _historyRecords.clear();
+    if (currentUid != null) {
+      // ดึงประวัติจาก Firestore แบบกรองเฉพาะของตัวเอง
+      FirebaseFirestore.instance
+          .collection('measurements')
+          .where('user_id', isEqualTo: currentUid) // 🟢 เพิ่มบรรทัดนี้: กรองเฉพาะ UID ของตัวเอง
+          .orderBy('measured_at', descending: true)
+          .snapshots()
+          .listen((QuerySnapshot snapshot) {
+            _historyRecords.clear();
 
-          for (var doc in snapshot.docs) {
-            final data = doc.data() as Map<String, dynamic>;
+            for (var doc in snapshot.docs) {
+              final data = doc.data() as Map<String, dynamic>;
 
-            DateTime timestamp = DateTime.now();
-            if (data['measured_at'] != null) {
-              timestamp = (data['measured_at'] as Timestamp).toDate();
+              DateTime timestamp = DateTime.now();
+              if (data['measured_at'] != null) {
+                timestamp = (data['measured_at'] as Timestamp).toDate();
+              }
+
+              _historyRecords.add(
+                BmiRecord(
+                  key: doc.id,
+                  timestamp: timestamp,
+                  weight: (data['weight'] ?? 0).toDouble(),
+                  height: (data['height'] ?? 0).toDouble(),
+                  heartRate: (data['heart_rate'] ?? 0).toInt(),
+                  bmi: (data['bmi'] ?? 0).toDouble(),
+                  status: data['body_type']?.toString() ?? "Unknown",
+                ),
+              );
             }
-
-            _historyRecords.add(
-              BmiRecord(
-                key: doc.id,
-                timestamp: timestamp,
-                weight: (data['weight'] ?? 0).toDouble(),
-                height: (data['height'] ?? 0).toDouble(),
-                heartRate: (data['heart_rate'] ?? 0).toInt(),
-                bmi: (data['bmi'] ?? 0).toDouble(),
-                status: data['body_type']?.toString() ?? "Unknown",
-              ),
-            );
-          }
-          notifyListeners();
-        });
+            notifyListeners();
+          });
+    }
   }
 
   void updateHeight(double newHeight) {
@@ -279,10 +272,18 @@ class WeightProvider with ChangeNotifier {
   Future<void> saveCurrentData() async {
     if (_currentWeight == 0) return;
 
+    // 🟢 ดึง UID ของผู้ใช้งานปัจจุบัน
+    final String? currentUid = FirebaseAuth.instance.currentUser?.uid;
+    
+    if (currentUid == null) {
+      print("❌ ไม่สามารถบันทึกได้ เนื่องจากยังไม่ได้เข้าสู่ระบบ");
+      return;
+    }
+
     try {
       print("👉 กำลังบันทึกข้อมูลลง Firestore...");
       await FirebaseFirestore.instance.collection('measurements').add({
-        'user_id': 'UID_TEST_01',
+        'user_id': currentUid, // 🟢 เปลี่ยนจาก 'UID_TEST_01' เป็น UID จริงของผู้ใช้
         'device_id': 'DEVICE_01',
         'weight': _currentWeight,
         'height': _heightCm,

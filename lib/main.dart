@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:project/model/firebase_options.dart';
+import 'package:project/firebase_options.dart';
+import 'package:project/providers/auth_provider.dart';
+import 'package:project/screen/auth/Auth_page.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 
 // Import ไฟล์ของคุณ (เช็ค Path ให้ตรงกับโฟลเดอร์ในโปรเจกต์คุณด้วยนะครับ)
-import 'package:project/model/weight_provider.dart';
-import 'package:project/screen/MainPage.dart'; // ไฟล์หน้า HomePage ด้านบน
-import 'package:project/screen/History.dart'; // ไฟล์หน้าประวัติของคุณ
+import 'package:project/providers/weight_provider.dart';
+import 'package:project/screen/homee_page.dart.dart'; // ไฟล์หน้า HomePage ด้านบน
+import 'package:project/screen/history_page.dart'; // ไฟล์หน้าประวัติของคุณ
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +22,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WeightProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: const BMISmartScaleApp(),
     ),
@@ -39,7 +42,7 @@ class BMISmartScaleApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Kanit',
       ),
-      home: const MainNavigation(),
+      home: AuthPage(),
     );
   }
 }

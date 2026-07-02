@@ -53,13 +53,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBzDbyMiz_ty5U6HG8NcrboslLkmXiy6bM',
-    appId: '1:164097534241:android:64f639cbf5b7d067a8b660',
+    appId: '1:164097534241:android:b20c142ce814083ea8b660',
     messagingSenderId: '164097534241',
     projectId: 'smart-health-scale',
     databaseURL: 'https://smart-health-scale-default-rtdb.firebaseio.com',
     storageBucket: 'smart-health-scale.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBy0psd64RuzsYGeTf7xe2BniTE4V2T1yg',
     appId: '1:164097534241:ios:476419ddd3660048a8b660',
@@ -69,7 +68,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'smart-health-scale.firebasestorage.app',
     iosBundleId: 'com.example.project',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyBy0psd64RuzsYGeTf7xe2BniTE4V2T1yg',
     appId: '1:164097534241:ios:476419ddd3660048a8b660',

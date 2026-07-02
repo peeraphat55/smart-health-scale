@@ -8,9 +8,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:164097534241:android:64f639cbf5b7d067a8b660",
+        "mobilesdk_app_id": "1:164097534241:android:b20c142ce814083ea8b660",
         "android_client_info": {
-          "package_name": "com.example.project"
+          "package_name": "com.ku.smarthealthscale"
         }
       },
       "oauth_client": [],
