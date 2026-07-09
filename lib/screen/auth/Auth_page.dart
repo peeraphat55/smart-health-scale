@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:project/main.dart';
+import 'package:project/screen/main_navigation.dart';
 import 'package:provider/provider.dart';
-
-import 'package:project/providers/auth_provider.dart'; // import provider ตัวใหม่
-import 'package:project/main.dart'; // เพื่อลิงก์ไปหน้า MainNavigation
+import 'package:project/providers/auth_provider.dart'; 
+import 'package:project/core/app_theme.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -19,16 +20,13 @@ class _AuthPageState extends State<AuthPage> {
   int _selectedGender = 0; 
 
   void _handleSubmit() async {
-    // 1. ดึงค่าจากช่องกรอก
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final ageText = _ageController.text.trim();
 
-    // 2. ตรวจสอบข้อมูลเบื้องต้น
     if (email.isEmpty || password.isEmpty) return _showError("กรุณากรอกอีเมลและรหัสผ่าน");
     if (!isLogin && ageText.isEmpty) return _showError("กรุณากรอกอายุของคุณ");
 
-    // 3. เรียกใช้ Logic จาก AuthProvider
     final authProvider = context.read<AuthProvider>();
     String? errorMessage;
 
@@ -43,37 +41,31 @@ class _AuthPageState extends State<AuthPage> {
       );
     }
 
-    // 4. จัดการผลลัพธ์
-    // 4. จัดการผลลัพธ์
     if (errorMessage != null) {
-      _showError(errorMessage); // ถ้ามี Error ให้แสดงแจ้งเตือน
+      _showError(errorMessage);
     } else if (mounted) {
-      // 🟢 แยกการทำงานระหว่าง โหมดล็อกอิน กับ โหมดสมัครสมาชิก
       if (isLogin) {
-        // ถ้าเป็นการ "เข้าสู่ระบบ" สำเร็จ -> พาเข้าแอปทันที
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const MainNavigation()),
         );
       } else {
-        // ถ้าเป็นการ "สมัครสมาชิก" สำเร็จ -> แจ้งเตือนสีเขียว + สลับหน้าเป็นล็อกอิน
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ"),
-            backgroundColor: Colors.green, // แจ้งเตือนสีเขียวเพื่อบอกว่าสำเร็จ
+            backgroundColor: Colors.green,
           ),
         );
-        
         setState(() {
-          isLogin = true; // เปลี่ยน UI กลับเป็นโหมดล็อกอิน
-          _passwordController.clear(); // ล้างช่องรหัสผ่านให้กรอกใหม่เพื่อความปลอดภัย
+          isLogin = true;
+          _passwordController.clear();
         });
       }
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.redAccent));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: AppTheme.error));
   }
 
   @override
@@ -86,21 +78,19 @@ class _AuthPageState extends State<AuthPage> {
 
   @override
   Widget build(BuildContext context) {
-    // เฝ้าดูสถานะ isLoading เพื่อหมุนวงกลม
     final isLoading = context.watch<AuthProvider>().isLoading;
 
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.monitor_weight_rounded, size: 100, color: Color(0xFF7B61FF)),
+              const Icon(Icons.monitor_weight_rounded, size: 100, color: AppTheme.primary),
               const SizedBox(height: 20),
               Text(isLogin ? "เข้าสู่ระบบ" : "สร้างบัญชีใหม่", 
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF7B61FF))),
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppTheme.primary)),
               const SizedBox(height: 30),
 
               _buildTextField(_emailController, "Email", Icons.email_outlined, TextInputType.emailAddress),
@@ -130,7 +120,7 @@ class _AuthPageState extends State<AuthPage> {
                 height: 55,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7B61FF),
+                    backgroundColor: AppTheme.primary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   ),
                   onPressed: isLoading ? null : _handleSubmit,
@@ -161,8 +151,8 @@ class _AuthPageState extends State<AuthPage> {
 
   InputDecoration _inputStyle(IconData icon) {
     return InputDecoration(
-      prefixIcon: Icon(icon, color: const Color(0xFF7B61FF)),
-      filled: true, fillColor: const Color(0xFFF3EFFF),
+      prefixIcon: Icon(icon, color: AppTheme.primary),
+      filled: true, fillColor: AppTheme.primaryLight,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
     );
   }
