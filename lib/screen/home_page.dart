@@ -2,39 +2,85 @@ import 'package:flutter/material.dart';
 import 'package:project/providers/weight_provider_bluetooth.dart';
 import 'package:provider/provider.dart';
 import 'package:project/core/app_theme.dart';
-import 'package:project/widgets/dashboard_card.dart'; // import ไฟล์นี้เข้าไป
+import 'package:project/widgets/dashboard_card.dart';
+import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 
-class HomePage extends StatelessWidget {
+// เปลี่ยนจาก StatelessWidget เป็น StatefulWidget
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  void _editHeightDialog(BuildContext context, WeightProvider provider) {
-    TextEditingController heightController = TextEditingController(
-      text: provider.heightCm.toStringAsFixed(0),
-    );
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  // 1. สร้างตัวแปรเช็คสถานะการบันทึก
+  bool _isSaving = false;
+
+  Future<void> _onStatusTap(BuildContext context, WeightProvider provider) async {
+    if (provider.isConnected) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("ตัดการเชื่อมต่อ"),
+          content: Text("ต้องการตัดการเชื่อมต่อกับ '${provider.connectedDeviceName ?? "อุปกรณ์"}' หรือไม่?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("ยกเลิก"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("ตัดการเชื่อมต่อ"),
+            ),
+          ],
+        ),
+      );
+      if (confirm == true) {
+        await provider.disconnectDevice();
+      }
+      return;
+    }
+
+    // ยังไม่เชื่อมต่อ -> รีเฟรชรายชื่ออุปกรณ์ที่จับคู่ไว้ แล้วเปิด dialog เลือกอุปกรณ์
+    await provider.getPairedDevices();
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text("แก้ไขส่วนสูง (Cm)"),
-          content: TextField(
-            controller: heightController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(hintText: "เช่น 170"),
+          title: const Text("เลือกอุปกรณ์ ESP32"),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: provider.pairedDevices.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      "ยังไม่พบอุปกรณ์ที่จับคู่ไว้\nกรุณาไปจับคู่ 'ESP32_SmartScale' ผ่านหน้า Bluetooth settings ของเครื่องก่อน",
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: provider.pairedDevices.length,
+                    itemBuilder: (context, index) {
+                      final BluetoothDevice device = provider.pairedDevices[index];
+                      return ListTile(
+                        leading: const Icon(Icons.bluetooth),
+                        title: Text(device.name ?? "อุปกรณ์ไม่ทราบชื่อ"),
+                        subtitle: Text(device.address),
+                        onTap: () {
+                          Navigator.pop(context);
+                          provider.connectToDevice(device);
+                        },
+                      );
+                    },
+                  ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("ยกเลิก"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                double? newHeight = double.tryParse(heightController.text);
-                if (newHeight != null && newHeight > 0)
-                  provider.updateHeight(newHeight);
-                Navigator.pop(context);
-              },
-              child: const Text("บันทึก"),
+              child: const Text("ปิด"),
             ),
           ],
         );
@@ -43,62 +89,87 @@ class HomePage extends StatelessWidget {
   }
 
   @override
-Widget build(BuildContext context) {
-  final weightData = context.watch<WeightProvider>();
-  // 🟢 สมมติว่ามีตัวแปรสถานะใน provider หรือคุณจะสร้างขึ้นมาใหม่
-  bool isConnected = weightData.currentWeight > 0; 
-  String deviceName = isConnected ? "ESP32_Scale_01" : "ไม่ได้เชื่อมต่อ";
+  Widget build(BuildContext context) {
+    final weightData = context.watch<WeightProvider>();
+    final bool isConnected = weightData.isConnected;
+    final bool isConnecting = weightData.isConnecting;
+    final String deviceName = isConnected
+        ? (weightData.connectedDeviceName ?? "ESP32 Scale")
+        : (isConnecting ? "กำลังเชื่อมต่อ..." : "ไม่ได้เชื่อมต่อ (แตะเพื่อเชื่อมต่อ)");
 
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text("Daily BMI"),
-      // 🟢 ลบส่วน CircleAvatar ออกเรียบร้อยแล้ว
-    ),
-    body: SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // 🟢 กล่องสถานะบลูทูธ (แทนที่กล่อง Overweight เดิม)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isConnected ? AppTheme.success : AppTheme.error, // เปลี่ยนสีตามสถานะ
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    deviceName,
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Smart Scale"),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () => _onStatusTap(context, weightData),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isConnected
+                      ? AppTheme.success
+                      : (isConnecting ? Colors.orange : AppTheme.error),
+                  borderRadius: BorderRadius.circular(25),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.all(Radius.circular(30)),
-                  ),
-                  child: Text(
-                    isConnected ? "Connected" : "Disconnected",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isConnected ? AppTheme.success : AppTheme.error,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          if (isConnecting)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 10),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              deviceName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.all(Radius.circular(30)),
+                      ),
+                      child: Text(
+                        isConnected ? "Connected" : (isConnecting ? "Connecting" : "Disconnected"),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isConnected
+                              ? AppTheme.success
+                              : (isConnecting ? Colors.orange : AppTheme.error),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          
-          // ... (ส่วน GridView และปุ่ม Save/Delete คงเดิม) ...
             const SizedBox(height: 20),
 
-            // 📍 ค้นหาช่วง GridView.count ในไฟล์ home_page.dart แล้วเปลี่ยนเป็น:
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -107,21 +178,14 @@ Widget build(BuildContext context) {
               mainAxisSpacing: 15,
               crossAxisSpacing: 15,
               children: [
-                // 🟢 วาง DashboardCard แทนที่การเรียกฟังก์ชัน _buildDataCard เดิม
                 DashboardCard(
                   label: "Weight",
                   value: "${weightData.currentWeight.toStringAsFixed(1)} Kg",
                 ),
-
-                GestureDetector(
-                  onTap: () => _editHeightDialog(context, weightData),
-                  child: DashboardCard(
-                    label: "Height",
-                    value: "${weightData.heightCm.toStringAsFixed(0)} Cm",
-                    isEditable: true,
-                  ),
+                DashboardCard(
+                  label: "Height",
+                  value: "${weightData.heightCm.toStringAsFixed(0)} Cm",
                 ),
-
                 DashboardCard(
                   label: "BMI",
                   value: weightData.bmi.toStringAsFixed(1),
@@ -140,28 +204,69 @@ Widget build(BuildContext context) {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed: () async {
-                    if (weightData.currentWeight == 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('❌ ไม่สามารถบันทึกได้!'),
-                          backgroundColor: AppTheme.error,
+                  // 2. ถ้า _isSaving เป็น true ให้ปิดปุ่ม (ตั้งค่าเป็น null)
+                  onPressed: _isSaving
+                      ? null
+                      : () async {
+                          if (weightData.currentWeight == 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('❌ ไม่สามารถบันทึกได้!'),
+                                backgroundColor: AppTheme.error,
+                              ),
+                            );
+                            return;
+                          }
+
+                          // 3. ล็อคปุ่ม
+                          setState(() {
+                            _isSaving = true;
+                          });
+
+                          try {
+                            // บันทึกข้อมูล
+                            await weightData.saveCurrentData();
+                            
+                            // เพิ่มการดีเลย์ 1.5 วินาที เพื่อกันการกดรัว
+                            await Future.delayed(const Duration(milliseconds: 1500));
+
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✅ บันทึกข้อมูลลงฐานข้อมูลเรียบร้อย!'),
+                                backgroundColor: AppTheme.success,
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('❌ เกิดข้อผิดพลาด: $e'),
+                                backgroundColor: AppTheme.error,
+                              ),
+                            );
+                          } finally {
+                            // 4. ปลดล็อคปุ่มเสมอ
+                            if (mounted) {
+                              setState(() {
+                                _isSaving = false;
+                              });
+                            }
+                          }
+                        },
+                  // 5. แสดงวงกลมโหลดสลับกับข้อความ Save
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          "Save",
+                          style: TextStyle(color: AppTheme.success),
                         ),
-                      );
-                      return;
-                    }
-                    await weightData.saveCurrentData();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✅ บันทึกข้อมูลลงฐานข้อมูลเรียบร้อย!'),
-                        backgroundColor: AppTheme.success,
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "Save",
-                    style: TextStyle(color: AppTheme.success),
-                  ),
                 ),
                 ElevatedButton(
                   onPressed: () {},
@@ -174,56 +279,6 @@ Widget build(BuildContext context) {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDataCard(
-    String label,
-    String value, {
-    bool fullWidth = false,
-    bool isEditable = false,
-  }) {
-    return Container(
-      width: fullWidth ? double.infinity : null,
-      decoration: BoxDecoration(
-        color: AppTheme.primaryLight,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.primary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (isEditable)
-            const Positioned(
-              top: 8,
-              right: 8,
-              child: Icon(Icons.edit, size: 16, color: Colors.grey),
-            ),
-        ],
       ),
     );
   }

@@ -1,12 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
 
-// ไฟล์นี้เก็บเฉพาะ "ฟังก์ชันคำนวณ/ประมวลผลข้อมูล" สำหรับกราฟ BMI
-// (จัดกลุ่มตามเดือน, คำนวณค่าเฉลี่ย, สร้างจุดกราฟ ฯลฯ)
-// ไม่มีโค้ด UI/Widget อยู่ในไฟล์นี้เลย
-//
-// ส่วน UI (MonthlyGraphView, YearlyGraphView, การ์ดต่างๆ, ตัวกราฟ)
-// ถูกย้ายไปอยู่ที่ history_graphs_ui.dart และเรียกใช้ฟังก์ชันจากไฟล์นี้
-
 const List<String> thaiMonths = [
   '',
   'ม.ค.',
@@ -23,11 +16,17 @@ const List<String> thaiMonths = [
   'ธ.ค.',
 ];
 
-/// จัดกลุ่ม record ตามเดือน คืนค่าเป็น Map ที่ key คือ "yyyy-MM"
-/// (ลำดับของ record ภายในแต่ละเดือนจะเรียงตามลำดับเดิมของ [records])
 Map<String, List<dynamic>> groupRecordsByMonth(List<dynamic> records) {
   Map<String, List<dynamic>> monthlyData = {};
   for (var r in records) {
+    
+    // ถ้าค่าใดค่าหนึ่งเป็น 0 หรือสถานะไม่ได้อยู่ใน 4 ค่ามาตรฐาน (ซึ่งก็คือสถานะ "ไม่ทราบค่า")
+    if (r.weight == 0 || r.height == 0 || r.bmi == 0 ||
+        !(r.status == "Underweight" || r.status == "Healthy" || 
+          r.status == "Overweight" || r.status == "Obese")) {
+      continue; // ข้ามการทำงานรอบนี้ไปเลย (ไม่นำข้อมูลนี้ไปใส่ในกราฟ)
+    }
+
     String key =
         "${r.timestamp.year}-${r.timestamp.month.toString().padLeft(2, '0')}";
     if (!monthlyData.containsKey(key)) monthlyData[key] = [];
@@ -74,12 +73,36 @@ double averageBmi(List<dynamic> records) {
   return records.fold(0.0, (sum, item) => sum + item.bmi) / records.length;
 }
 
-/// ผลต่างของ BMI ระหว่างค่าล่าสุดกับค่าก่อนหน้า (เรียงเก่า->ใหม่)
-/// คืน 0.0 ถ้ามีข้อมูลไม่ถึง 2 รายการ
+/// ผลต่างของ BMI โดยใช้ Linear Regression จาก 4 จุดล่าสุด (หาแนวโน้มที่เสถียรขึ้น)
 double bmiChange(List<dynamic> recordsOldToNew) {
-  if (recordsOldToNew.length <= 1) return 0.0;
-  return recordsOldToNew.last.bmi -
-      recordsOldToNew[recordsOldToNew.length - 2].bmi;
+  int n = recordsOldToNew.length;
+  
+  if (n <= 1) return 0.0; // ข้อมูลไม่พอเปรียบเทียบ
+
+  // กรณีมี 2 หรือ 3 จุด ให้หาผลต่างจาก 2 จุดล่าสุด
+  if (n == 2 || n == 3) {
+    return recordsOldToNew.last.bmi - recordsOldToNew[n - 2].bmi;
+  }
+
+  // กรณีมีตั้งแต่ 4 จุดขึ้นไป ใช้ Linear Regression กับ 4 จุดล่าสุด
+  int numPoints = 4;
+  List<dynamic> recentRecords = recordsOldToNew.sublist(n - numPoints, n);
+
+  double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (int i = 0; i < numPoints; i++) {
+    double x = (i + 1).toDouble();
+    double y = recentRecords[i].bmi;
+    
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+
+  double denominator = (numPoints * sumX2) - (sumX * sumX);
+  if (denominator == 0) return 0.0;
+
+  return ((numPoints * sumXY) - (sumX * sumY)) / denominator;
 }
 
 /// คืนรายการ (เดือน -> records) ของ 12 เดือนล่าสุด เรียงจาก "เก่าสุด -> ใหม่สุด"

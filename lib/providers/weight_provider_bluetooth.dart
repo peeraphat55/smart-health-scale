@@ -9,12 +9,12 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
 
 class WeightProvider with ChangeNotifier {
-  double _currentWeight = 0.0;
-  double _heightCm = 155.0;
-  int _currentHeartRate = 0;
-  double _receivedBmi = 0.0;
+  double _currentWeight = 50.0;
+  double _heightCm = 163.0;
+  int _currentHeartRate = 80;
+  double _receivedBmi = 38.0;
 
-  int _age = 21;
+  int _age = 0;
   int _gender = 0;
 
   final List<BmiRecord> _historyRecords = [];

@@ -5,6 +5,7 @@ class AppTheme {
   static const Color primary = Color(0xFF7B61FF);
   static const Color primaryLight = Color(0xFFF3EFFF);
   static const Color background = Colors.white;
+  static const Color maintext = Colors.black;
   
   static const Color success = Colors.green;
   static const Color warning = Colors.orange;

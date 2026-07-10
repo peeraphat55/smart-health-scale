@@ -132,10 +132,33 @@ class YearlyGraphView extends StatelessWidget {
     final displayValue1 = spots.isNotEmpty
         ? (spots.fold(0.0, (prev, spot) => prev + spot.y) / spots.length)
         : 0.0;
-    final displayChange = spots.length > 1
-        ? spots.last.y - spots[spots.length - 2].y
-        : 0.0;
+    // คำนวณการเปลี่ยนแปลงรายปี
+    double displayChange = 0.0;
+    int n = spots.length;
+    
+    if (n == 2 || n == 3) {
+      // กรณีมี 2 หรือ 3 จุด: ใช้ 2 จุดล่าสุดลบกันโดยตรง
+      displayChange = spots.last.y - spots[n - 2].y;
+    } else if (n >= 4) {
+      // กรณีมี 4 จุดขึ้นไป: คำนวณด้วย Linear Regression 4 จุดล่าสุด
+      int numPoints = 4;
+      List<FlSpot> recentSpots = spots.sublist(n - numPoints, n);
 
+      double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+      for (int i = 0; i < numPoints; i++) {
+        double x = (i + 1).toDouble();
+        double y = recentSpots[i].y;
+        sumX += x;
+        sumY += y;
+        sumXY += x * y;
+        sumX2 += x * x;
+      }
+      
+      double denominator = (numPoints * sumX2) - (sumX * sumX);
+      if (denominator != 0) {
+        displayChange = ((numPoints * sumXY) - (sumX * sumY)) / denominator;
+      }
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(

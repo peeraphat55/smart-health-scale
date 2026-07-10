@@ -27,7 +27,7 @@ class _AuthPageState extends State<AuthPage> {
     if (email.isEmpty || password.isEmpty) return _showError("กรุณากรอกอีเมลและรหัสผ่าน");
     if (!isLogin && ageText.isEmpty) return _showError("กรุณากรอกอายุของคุณ");
 
-    final authProvider = context.read<AuthProvider>();
+    final authProvider = context.read<AppAuthProvider>();
     String? errorMessage;
 
     if (isLogin) {
@@ -45,9 +45,11 @@ class _AuthPageState extends State<AuthPage> {
       _showError(errorMessage);
     } else if (mounted) {
       if (isLogin) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainNavigation()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("เข้าสู่ระบบสำเร็จ!"), 
+            backgroundColor: Colors.green,
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -78,7 +80,7 @@ class _AuthPageState extends State<AuthPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthProvider>().isLoading;
+    final isLoading = context.watch<AppAuthProvider>().isLoading;
 
     return Scaffold(
       body: Center(

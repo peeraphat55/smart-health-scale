@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-import 'package:project/screen/history_page.dart';
+import 'package:project/screen/History/history_page.dart';
 import 'package:project/screen/home_page.dart';
 import 'package:project/core/app_theme.dart';
+import 'package:project/screen/profile_page.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -17,12 +18,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> _pages = [
     const HistoryPage(), 
     const HomePage(),    
-    const Center(
-      child: Text(
-        'กำลังพัฒนาหน้า Profile...',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-    ), 
+    const ProfilePage()
   ];
 
   @override

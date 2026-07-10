@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:project/providers/weight_provider_bluetooth.dart';
-import 'package:project/screen/history_graphs_ui.dart';
+import 'package:project/screen/History/history_graphs_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:project/core/app_theme.dart';
 
-// ไฟล์นี้เก็บเฉพาะโค้ดหน้า UI ของ History (Tab, List สรุป)
-// ส่วนกราฟรายเดือน/รายปี (MonthlyGraphView, YearlyGraphView) ถูกย้ายไปอยู่ที่
-// history_graphs_ui.dart (UI) และ history_graphs.dart (ฟังก์ชันคำนวณ)
-// และถูกเรียกใช้งานผ่าน import ด้านบน
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
@@ -17,7 +13,7 @@ class HistoryPage extends StatelessWidget {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(title: const Text("Daily BMI")),
+        appBar: AppBar(title: const Text("Smart Scale")),
         body: Column(
           children: [
             const TabBar(
@@ -96,7 +92,7 @@ switch (record.status) {
           margin: const EdgeInsets.only(bottom: 15),
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            color: AppTheme.historyCardBg,
+            color: AppTheme.primaryLight,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Stack(
@@ -110,7 +106,7 @@ switch (record.status) {
                       Center(
                         child: Text(
                           "$dateStr   $timeStr",
-                          style: const TextStyle(color: AppTheme.historyLabelColor, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
@@ -118,22 +114,22 @@ switch (record.status) {
                   const SizedBox(height: 15),
                   Text(
                     "Weight: ${record.weight.toStringAsFixed(2)} กก.",
-                    style: const TextStyle(color: AppTheme.historyLabelColor, fontSize: 16),
+                    style: const TextStyle(color: AppTheme.primary, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "Height: ${record.height.toStringAsFixed(0)} ซม.",
-                    style: const TextStyle(color: AppTheme.historyLabelColor, fontSize: 16),
+                    style: const TextStyle(color: AppTheme.primary, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "Heart Rate: ${record.heartRate} ครั้ง/นาที",
-                    style: const TextStyle(color: AppTheme.historyLabelColor, fontSize: 16),
+                    style: const TextStyle(color: AppTheme.primary, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "BMI: ${record.bmi.toStringAsFixed(2)}",
-                    style: const TextStyle(color: AppTheme.historyLabelColor, fontSize: 16),
+                    style: const TextStyle(color: AppTheme.primary, fontSize: 16),
                   ),
                 ],
               ),
