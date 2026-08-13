@@ -1,16 +1,3 @@
-import com.android.build.gradle.BaseExtension
-
-subprojects {
-    afterEvaluate {
-        if (project.name == "flutter_bluetooth_serial_ble" || project.name == "flutter_bluetooth_serial") {
-            extensions.findByType(BaseExtension::class.java)?.let { android ->
-                if (android.namespace == null) {
-                    android.namespace = "io.github.edufolly.flutterbluetoothserial"
-                }
-            }
-        }
-    }
-}
 allprojects {
     repositories {
         google()

@@ -6,13 +6,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:project/model/bmi_record.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class WeightProvider with ChangeNotifier {
-  double _currentWeight = 50.0;
-  double _heightCm = 163.0;
-  int _currentHeartRate = 80;
-  double _receivedBmi = 38.0;
+  double _currentWeight = 0.0;
+  double _heightCm = 0.0;
+  int _currentHeartRate = 0;
+  double _receivedBmi = 0.0;
+  String _measurementStage = 'standby';
 
   int _age = 0;
   int _gender = 0;
@@ -22,8 +23,16 @@ class WeightProvider with ChangeNotifier {
   Interpreter? _interpreter;
 
   // ---------------- Bluetooth (ESP32) ----------------
-  final FlutterBluetoothSerial _bluetooth = FlutterBluetoothSerial.instance;
-  BluetoothConnection? _connection;
+  static const String _targetName = 'ESP32_SmartScale_BLE';
+  static final Guid _serviceUuid =
+      Guid('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+  static final Guid _characteristicUuid =
+      Guid('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+  StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
+  StreamSubscription<List<int>>? _valueSubscription;
+  BluetoothCharacteristic? _dataCharacteristic;
   List<BluetoothDevice> _pairedDevices = [];
   BluetoothDevice? _connectedDevice;
   bool _isConnecting = false;
@@ -36,12 +45,13 @@ class WeightProvider with ChangeNotifier {
   int get currentHeartRate => _currentHeartRate;
   int get age => _age;
   int get gender => _gender;
+  String get measurementStage => _measurementStage;
   List<BmiRecord> get historyRecords => _historyRecords;
 
   List<BluetoothDevice> get pairedDevices => _pairedDevices;
   bool get isConnecting => _isConnecting;
   bool get isConnected => _isConnected;
-  String? get connectedDeviceName => _connectedDevice?.name;
+  String? get connectedDeviceName => _connectedDevice?.platformName;
 
   WeightProvider() {
     _listenToDataChanges();
@@ -61,10 +71,10 @@ class WeightProvider with ChangeNotifier {
   }
 
   try {
-    bool? isEnabled = await _bluetooth.isEnabled;
-    if (isEnabled != true) {
-      await _bluetooth.requestEnable();
-    }
+    await FlutterBluePlus.adapterState
+        .where((state) => state == BluetoothAdapterState.on)
+        .first
+        .timeout(const Duration(seconds: 15));
     await getPairedDevices();
   } catch (e) {
     print("❌ Bluetooth init error: $e");
@@ -78,18 +88,45 @@ Future<bool> _requestBluetoothPermissions() async {
     Permission.locationWhenInUse,
   ].request();
 
-  return statuses.values.every((status) => status.isGranted);
+  final bleGranted =
+      (statuses[Permission.bluetoothConnect]?.isGranted ?? false) &&
+      (statuses[Permission.bluetoothScan]?.isGranted ?? false);
+  final legacyAndroidGranted =
+      statuses[Permission.locationWhenInUse]?.isGranted ?? false;
+  return bleGranted || legacyAndroidGranted;
 }
 
-  /// ดึงรายชื่ออุปกรณ์ที่จับคู่ (paired) ไว้แล้วในตัวเครื่อง
-  /// อย่าลืม: ต้องไปจับคู่ ESP32_SmartScale ผ่านหน้า Bluetooth settings ของมือถือก่อน
+  /// คงชื่อ method/getter เดิมไว้เพื่อให้หน้า Home เดิมยังเรียกได้ แต่รายการนี้
+  /// คืออุปกรณ์ BLE ที่สแกนพบ ไม่ใช่อุปกรณ์ที่จับคู่ใน Settings
   Future<void> getPairedDevices() async {
     try {
-      List<BluetoothDevice> devices = await _bluetooth.getBondedDevices();
-      _pairedDevices = devices;
+      if (FlutterBluePlus.isScanningNow) {
+        await FlutterBluePlus.stopScan();
+      }
+      _pairedDevices = [];
       notifyListeners();
+
+      await _scanSubscription?.cancel();
+      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+        for (final result in results) {
+          final advertisedName = result.advertisementData.advName;
+          final platformName = result.device.platformName;
+          if (advertisedName == _targetName || platformName == _targetName) {
+            final alreadyAdded = _pairedDevices.any(
+              (device) => device.remoteId == result.device.remoteId,
+            );
+            if (!alreadyAdded) {
+              _pairedDevices.add(result.device);
+              notifyListeners();
+            }
+          }
+        }
+      });
+
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
+      await FlutterBluePlus.isScanning.where((scanning) => !scanning).first;
     } catch (e) {
-      print("❌ ดึงรายชื่ออุปกรณ์ที่จับคู่ไม่สำเร็จ: $e");
+      print("❌ สแกน BLE ไม่สำเร็จ: $e");
     }
   }
 
@@ -101,31 +138,52 @@ Future<bool> _requestBluetoothPermissions() async {
     notifyListeners();
 
     try {
-      BluetoothConnection connection =
-          await BluetoothConnection.toAddress(device.address);
-      _connection = connection;
+      if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
+      await device.connect(
+  license: License.free,
+  timeout: const Duration(seconds: 15),
+);
+
+      _connectionSubscription?.cancel();
+      _connectionSubscription = device.connectionState.listen((state) {
+        if (state == BluetoothConnectionState.disconnected &&
+            _connectedDevice?.remoteId == device.remoteId) {
+          _isConnected = false;
+          _isConnecting = false;
+          _connectedDevice = null;
+          _dataCharacteristic = null;
+          notifyListeners();
+        }
+      });
+
+      final services = await device.discoverServices();
+      BluetoothCharacteristic? target;
+      for (final service in services) {
+        if (service.uuid == _serviceUuid) {
+          for (final characteristic in service.characteristics) {
+            if (characteristic.uuid == _characteristicUuid) {
+              target = characteristic;
+              break;
+            }
+          }
+        }
+      }
+      if (target == null) {
+        await device.disconnect();
+        throw Exception('ไม่พบ Service/Characteristic ของ Smart Scale');
+      }
+
+      _dataCharacteristic = target;
+      await _valueSubscription?.cancel();
+      _valueSubscription = target.onValueReceived.listen(_onDataReceived);
+      await target.setNotifyValue(true);
+
       _connectedDevice = device;
       _isConnected = true;
       _isConnecting = false;
       notifyListeners();
 
-      print("✅ เชื่อมต่อ ${device.name} สำเร็จ");
-
-      _connection!.input!.listen(
-        _onDataReceived,
-        onDone: () {
-          print("🔌 การเชื่อมต่อบลูทูธถูกตัด");
-          _isConnected = false;
-          _connectedDevice = null;
-          _connection = null;
-          notifyListeners();
-        },
-        onError: (error) {
-          print("❌ Bluetooth stream error: $error");
-          _isConnected = false;
-          notifyListeners();
-        },
-      );
+      print("✅ เชื่อมต่อ ${device.platformName} สำเร็จ");
     } catch (e) {
       print("❌ เชื่อมต่อไม่สำเร็จ: $e");
       _isConnecting = false;
@@ -135,10 +193,10 @@ Future<bool> _requestBluetoothPermissions() async {
   }
 
   Future<void> disconnectDevice() async {
-    try {
-      await _connection?.finish();
-    } catch (_) {}
-    _connection = null;
+    await _valueSubscription?.cancel();
+    _valueSubscription = null;
+    await _connectedDevice?.disconnect();
+    _dataCharacteristic = null;
     _connectedDevice = null;
     _isConnected = false;
     notifyListeners();
@@ -163,24 +221,52 @@ Future<bool> _requestBluetoothPermissions() async {
   void _parseSensorLine(String line) {
     try {
       List<String> values = line.split(',');
+      if (values.isEmpty) return;
+
+      if (values[0] == 'STATUS' && values.length >= 2) {
+        _measurementStage = values[1].toLowerCase();
+        notifyListeners();
+        return;
+      }
+
+      if (values[0] == 'WEIGHT' && values.length >= 2) {
+        _currentWeight = double.parse(values[1]);
+        _measurementStage = 'hold_still';
+        notifyListeners();
+        return;
+      }
+
+      if (values[0] == 'DATA' && values.length == 5) {
+        _currentWeight = double.parse(values[1]);
+        _heightCm = double.parse(values[2]);
+        _currentHeartRate = int.parse(values[3]);
+        _receivedBmi = double.parse(values[4]);
+        _measurementStage = 'complete';
+        notifyListeners();
+        return;
+      }
+
+      // รองรับ payload เดิมไว้ เพื่อไม่ให้ส่วนอื่นของแอปเสีย
       if (values.length == 4) {
-        double weight = double.parse(values[0]);
-        double height = double.parse(values[1]);
-        int heartRate = int.parse(values[2]);
-        double bmiValue = double.parse(values[3]);
-
-        // ความสูงเท่ากับ 0 หมายถึง ESP32 ยังอ่านค่าไม่ได้ (ยังไม่มีคนยืน) -> ข้ามไปก่อน
-        if (height <= 0) return;
-
-        _currentWeight = weight;
-        _heightCm = height;
-        _currentHeartRate = heartRate;
-        _receivedBmi = bmiValue;
+        _currentWeight = double.parse(values[0]);
+        _heightCm = double.parse(values[1]);
+        _currentHeartRate = int.parse(values[2]);
+        _receivedBmi = double.parse(values[3]);
+        _measurementStage = 'complete';
         notifyListeners();
       }
     } catch (e) {
       print("❌ Error parsing sensor data: '$line' -> $e");
     }
+  }
+
+  void resetMeasurementFlow() {
+    _currentWeight = 0.0;
+    _heightCm = 0.0;
+    _currentHeartRate = 0;
+    _receivedBmi = 0.0;
+    _measurementStage = 'standby';
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------
@@ -361,7 +447,7 @@ Future<bool> _requestBluetoothPermissions() async {
     try {
       await FirebaseFirestore.instance.collection('measurements').add({
         'user_id': currentUid,
-        'device_id': _connectedDevice?.address ?? 'DEVICE_01',
+        'device_id': _connectedDevice?.remoteId.str ?? 'DEVICE_01',
         'weight': _currentWeight,
         'height': _heightCm,
         'heart_rate': _currentHeartRate,
@@ -385,7 +471,10 @@ Future<bool> _requestBluetoothPermissions() async {
 
   @override
   void dispose() {
-    _connection?.dispose();
+    _scanSubscription?.cancel();
+    _connectionSubscription?.cancel();
+    _valueSubscription?.cancel();
+    _connectedDevice?.disconnect();
     super.dispose();
   }
 }

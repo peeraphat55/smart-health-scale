@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:project/providers/weight_provider_bluetooth.dart';
+import 'package:project/widgets/measurement_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:project/core/app_theme.dart';
 import 'package:project/widgets/dashboard_card.dart';
-import 'package:flutter_bluetooth_serial_ble/flutter_bluetooth_serial_ble.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 
 // เปลี่ยนจาก StatelessWidget เป็น StatefulWidget
 class HomePage extends StatefulWidget {
@@ -42,7 +44,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    // ยังไม่เชื่อมต่อ -> รีเฟรชรายชื่ออุปกรณ์ที่จับคู่ไว้ แล้วเปิด dialog เลือกอุปกรณ์
+    // ยังไม่เชื่อมต่อ -> สแกนหา ESP32 BLE แล้วเปิด dialog เลือกอุปกรณ์
     await provider.getPairedDevices();
     if (!context.mounted) return;
 
@@ -57,7 +59,7 @@ class _HomePageState extends State<HomePage> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Text(
-                      "ยังไม่พบอุปกรณ์ที่จับคู่ไว้\nกรุณาไปจับคู่ 'ESP32_SmartScale' ผ่านหน้า Bluetooth settings ของเครื่องก่อน",
+                      "ยังไม่พบ ESP32_SmartScale_BLE\nเปิด ESP32 และ Bluetooth แล้วลองแตะสถานะอีกครั้ง (ไม่ต้องจับคู่ผ่าน Settings)",
                     ),
                   )
                 : ListView.builder(
@@ -67,11 +69,24 @@ class _HomePageState extends State<HomePage> {
                       final BluetoothDevice device = provider.pairedDevices[index];
                       return ListTile(
                         leading: const Icon(Icons.bluetooth),
-                        title: Text(device.name ?? "อุปกรณ์ไม่ทราบชื่อ"),
-                        subtitle: Text(device.address),
-                        onTap: () {
-                          Navigator.pop(context);
-                          provider.connectToDevice(device);
+                        title: Text(device.platformName.isNotEmpty
+                            ? device.platformName
+                            : "อุปกรณ์ไม่ทราบชื่อ"),
+                        subtitle: Text(device.remoteId.str),
+                        onTap: () async {
+                          Navigator.pop(context); // ปิดหน้าต่างเลือกอุปกรณ์
+                          
+                          // 🟢 รอให้เชื่อมต่อให้เสร็จสิ้น
+                          await provider.connectToDevice(device);
+                          
+                          // 🟢 ถ้าเชื่อมต่อสำเร็จ ให้เด้ง Popup นำทางทันที
+                          if (provider.isConnected && context.mounted) {
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false, // บังคับไม่ให้กดปิดนอกกรอบ
+                              builder: (context) => const MeasurementFlowDialog(),
+                            );
+                          }
                         },
                       );
                     },
@@ -95,7 +110,7 @@ class _HomePageState extends State<HomePage> {
     final bool isConnecting = weightData.isConnecting;
     final String deviceName = isConnected
         ? (weightData.connectedDeviceName ?? "ESP32 Scale")
-        : (isConnecting ? "กำลังเชื่อมต่อ..." : "ไม่ได้เชื่อมต่อ (แตะเพื่อเชื่อมต่อ)");
+        : (isConnecting ? "กำลังเชื่อมต่อ..." : "ไม่ได้เชื่อมต่อ");
 
     return Scaffold(
       appBar: AppBar(
