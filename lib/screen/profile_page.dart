@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:project/core/app_theme.dart';
-import 'package:project/screen/auth/Auth_page.dart';
+import 'package:project/providers/weight_provider_bluetooth.dart';
+import 'package:provider/provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -26,24 +27,32 @@ class _ProfilePageState extends State<ProfilePage> {
     _fetchUserData();
   }
 
-Future<void> _fetchUserData() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _userData = doc.data();
-          _ageController.text = _userData?['age']?.toString() ?? '';
-          _gender = _userData?['gender'] ?? 0;
-          _isLoading = false; 
-        });
-      }
-    } else {
+  Future<void> _fetchUserData() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
 
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (!doc.exists) return;
+
+      final data = doc.data();
+      if (!mounted) return;
+
+      setState(() {
+        _userData = data;
+        _ageController.text = data?['age']?.toString() ?? '';
+
+        final genderValue = data?['gender'];
+        _gender = genderValue is int
+            ? genderValue
+            : int.tryParse(genderValue?.toString() ?? '') ?? 0;
+      });
+    } catch (e) {
+      debugPrint('❌ โหลดข้อมูลโปรไฟล์ไม่สำเร็จ: $e');
+    } finally {
+      // ไม่ว่าไม่มี document, ไม่มีผู้ใช้ หรือ Firestore error ก็ต้องหยุด Loading
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -51,26 +60,39 @@ Future<void> _fetchUserData() async {
   Future<void> _updateProfile() async {
     final user = _auth.currentUser;
     if (user != null) {
-      await _firestore.collection('users').doc(user.uid).update({
-        'age': int.tryParse(_ageController.text) ?? 0,
-        'gender': _gender,
-      });
-      if (mounted)
+      await _firestore.collection('users').doc(user.uid).set(
+        {
+          'age': int.tryParse(_ageController.text) ?? 0,
+          'gender': _gender,
+        },
+        SetOptions(merge: true),
+      );
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("อัปเดตข้อมูลสำเร็จ!")));
+      }
     }
   }
 
   @override
+  void dispose() {
+    _ageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final weightProvider = context.watch<WeightProvider>();
 
     return Scaffold(
       appBar: AppBar(title: const Text("Profile")),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         child: Column(
           children: [
             const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 60)),
@@ -189,7 +211,10 @@ Future<void> _fetchUserData() async {
               ],
             ),
 
-            const SizedBox(height: 49),
+            const SizedBox(height: 28),
+            _buildLatestMeasurementCard(weightProvider),
+
+            const SizedBox(height: 28),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
@@ -197,7 +222,7 @@ Future<void> _fetchUserData() async {
               onPressed: _updateProfile,
               child: const Text(
                 "บันทึกข้อมูล",
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: AppTheme.background),
               ),
             ),
             const SizedBox(height: 20),
@@ -211,13 +236,225 @@ Future<void> _fetchUserData() async {
               },
               child: const Text(
                 "ออกจากระบบ",
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: AppTheme.error),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildLatestMeasurementCard(WeightProvider provider) {
+    if (provider.historyRecords.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryLight,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppTheme.primary, width: 1.5),
+        ),
+        child: const Column(
+          children: [
+            Icon(
+              Icons.monitor_heart_outlined,
+              color: AppTheme.primary,
+              size: 36,
+            ),
+            SizedBox(height: 10),
+            Text(
+              'การวัดล่าสุด',
+              style: TextStyle(
+                color: AppTheme.primary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'ยังไม่มีข้อมูลการวัดที่บันทึกไว้',
+              style: TextStyle(color: AppTheme.maintext),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final latest = provider.historyRecords.first;
+    final statusColor = _statusColor(latest.status);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryLight,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppTheme.primary, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withOpacity(0.12),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.monitor_heart_rounded,
+                color: AppTheme.primary,
+                size: 30,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'การวัดล่าสุด',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  latest.status,
+                  style: const TextStyle(
+                    color: AppTheme.background,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _formatMeasurementDate(latest.timestamp),
+            style: const TextStyle(
+              color: AppTheme.primary,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMeasurementItem(
+                  icon: Icons.monitor_weight_outlined,
+                  label: 'น้ำหนัก',
+                  value: '${latest.weight.toStringAsFixed(1)} kg',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMeasurementItem(
+                  icon: Icons.height_rounded,
+                  label: 'ส่วนสูง',
+                  value: '${latest.height.toStringAsFixed(1)} cm',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMeasurementItem(
+                  icon: Icons.accessibility_new_rounded,
+                  label: 'BMI',
+                  value: latest.bmi.toStringAsFixed(1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMeasurementItem(
+                  icon: Icons.favorite_rounded,
+                  label: 'ชีพจร',
+                  value: '${latest.heartRate} BPM',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeasurementItem({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.primary, size: 23),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppTheme.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.maintext,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'underweight':
+        return AppTheme.statusUnderweight;
+      case 'healthy':
+        return AppTheme.statusHealthy;
+      case 'overweight':
+        return AppTheme.statusOverweight;
+      case 'obese':
+        return AppTheme.statusObese;
+      default:
+        return AppTheme.primary;
+    }
+  }
+
+  String _formatMeasurementDate(DateTime date) {
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year} '
+        '${twoDigits(date.hour)}:${twoDigits(date.minute)} น.';
   }
 
   DropdownMenuItem<int> _buildDropdownItem({
@@ -241,7 +478,7 @@ Future<void> _fetchUserData() async {
             Text(
               text,
               style: TextStyle(
-                color: isSelected ? AppTheme.primary : Colors.white,
+                color: isSelected ? AppTheme.primary : AppTheme.background,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 fontSize: 16,
               ),

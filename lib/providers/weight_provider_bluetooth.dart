@@ -23,7 +23,11 @@ class WeightProvider with ChangeNotifier {
   Interpreter? _interpreter;
 
   // ---------------- Bluetooth (ESP32) ----------------
-  static const String _targetName = 'ESP32_SmartScale_BLE';
+  static const Set<String> _targetNames = {
+    'ESP32_SmartScale_BLE',
+    'ESP32_SmartScale',
+    'ESP32_Health',
+  };
   static final Guid _serviceUuid =
       Guid('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
   static final Guid _characteristicUuid =
@@ -100,6 +104,18 @@ Future<bool> _requestBluetoothPermissions() async {
   /// คืออุปกรณ์ BLE ที่สแกนพบ ไม่ใช่อุปกรณ์ที่จับคู่ใน Settings
   Future<void> getPairedDevices() async {
     try {
+      final granted = await _requestBluetoothPermissions();
+      if (!granted) {
+        print('❌ ไม่มีสิทธิ์ Bluetooth Scan/Connect');
+        return;
+      }
+
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) {
+        print('❌ Bluetooth ยังไม่ได้เปิด');
+        return;
+      }
+
       if (FlutterBluePlus.isScanningNow) {
         await FlutterBluePlus.stopScan();
       }
@@ -111,12 +127,21 @@ Future<bool> _requestBluetoothPermissions() async {
         for (final result in results) {
           final advertisedName = result.advertisementData.advName;
           final platformName = result.device.platformName;
-          if (advertisedName == _targetName || platformName == _targetName) {
+          final advertisedServices = result.advertisementData.serviceUuids;
+          final nameMatches = _targetNames.contains(advertisedName) ||
+              _targetNames.contains(platformName);
+          final serviceMatches = advertisedServices.contains(_serviceUuid);
+
+          if (nameMatches || serviceMatches) {
             final alreadyAdded = _pairedDevices.any(
               (device) => device.remoteId == result.device.remoteId,
             );
             if (!alreadyAdded) {
               _pairedDevices.add(result.device);
+              print(
+                '🔎 พบ ESP32: adv="$advertisedName", '
+                'platform="$platformName", id=${result.device.remoteId}',
+              );
               notifyListeners();
             }
           }
@@ -163,7 +188,6 @@ Future<bool> _requestBluetoothPermissions() async {
           for (final characteristic in service.characteristics) {
             if (characteristic.uuid == _characteristicUuid) {
               target = characteristic;
-              break;
             }
           }
         }
@@ -200,6 +224,88 @@ Future<bool> _requestBluetoothPermissions() async {
     _connectedDevice = null;
     _isConnected = false;
     notifyListeners();
+  }
+
+  /// Refresh โดย Disconnect -> ให้ ESP32 ล้างค่า -> Reconnect -> Subscribe ใหม่
+  /// วิธีนี้ไม่ต้องใช้ BLE Write
+  Future<void> restartMeasurement() async {
+    if (_isConnecting) return;
+    final device = _connectedDevice;
+    if (!_isConnected || device == null) {
+      throw Exception('ยังไม่ได้เชื่อมต่อ ESP32');
+    }
+
+    _isConnecting = true;
+    notifyListeners();
+
+    try {
+      // ยกเลิก listener ก่อน Disconnect เพื่อไม่ให้ callback ล้าง device ที่จะใช้ต่อ
+      await _connectionSubscription?.cancel();
+      _connectionSubscription = null;
+      await _valueSubscription?.cancel();
+      _valueSubscription = null;
+      await device.disconnect();
+
+      _isConnected = false;
+      _dataCharacteristic = null;
+      resetMeasurementFlow();
+
+      // รอ ESP32 ประมวลผล onDisconnect และเปิด Advertising ใหม่
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      await device.connect(
+        license: License.free,
+        timeout: const Duration(seconds: 15),
+      );
+
+      final services = await device.discoverServices();
+      BluetoothCharacteristic? target;
+      for (final service in services) {
+        if (service.uuid != _serviceUuid) continue;
+        for (final characteristic in service.characteristics) {
+          if (characteristic.uuid == _characteristicUuid) {
+            target = characteristic;
+            break;
+          }
+        }
+        if (target != null) break;
+      }
+
+      if (target == null) {
+        await device.disconnect();
+        throw Exception('ไม่พบ Characteristic หลังเชื่อมต่อใหม่');
+      }
+
+      _dataCharacteristic = target;
+      _btBuffer = '';
+      _valueSubscription = target.onValueReceived.listen(_onDataReceived);
+      await target.setNotifyValue(true);
+
+      _connectedDevice = device;
+      _isConnected = true;
+      _measurementStage = 'measuring';
+
+      _connectionSubscription = device.connectionState.listen((state) {
+        if (state == BluetoothConnectionState.disconnected &&
+            _connectedDevice?.remoteId == device.remoteId) {
+          _isConnected = false;
+          _isConnecting = false;
+          _connectedDevice = null;
+          _dataCharacteristic = null;
+          notifyListeners();
+        }
+      });
+
+      print('✅ Refresh สำเร็จ: Disconnect และ Reconnect แล้ว');
+    } catch (e) {
+      _isConnected = false;
+      _dataCharacteristic = null;
+      print('❌ Refresh/Reconnect ไม่สำเร็จ: $e');
+      rethrow;
+    } finally {
+      _isConnecting = false;
+      notifyListeners();
+    }
   }
 
   /// ESP32 อาจส่งข้อมูลมาไม่ครบบรรทัดในครั้งเดียว จึงต้อง buffer แล้วตัดด้วย \n

@@ -18,6 +18,87 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   // 1. สร้างตัวแปรเช็คสถานะการบันทึก
   bool _isSaving = false;
+  bool _isRefreshing = false;
+  bool _isBluetoothBusy = false;
+
+  static const Duration _buttonCooldown = Duration(seconds: 3);
+
+  void _showMessage(String message, Color color) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: _buttonCooldown,
+      ),
+    );
+  }
+
+  Future<void> _waitForCooldown(Stopwatch stopwatch) async {
+    final remaining = _buttonCooldown - stopwatch.elapsed;
+    if (!remaining.isNegative) await Future.delayed(remaining);
+  }
+
+  Future<void> _restartMeasurement() async {
+    if (_isRefreshing) return;
+    final cooldown = Stopwatch()..start();
+    setState(() => _isRefreshing = true);
+
+    try {
+      final provider = context.read<WeightProvider>();
+      await provider.restartMeasurement();
+      _showMessage(
+        'เริ่มวัดใหม่แล้ว กรุณายืนนิ่งและวางนิ้วบนเซนเซอร์',
+        AppTheme.refreshButton,
+      );
+    } catch (e) {
+      _showMessage('เริ่มวัดใหม่ไม่สำเร็จ: $e', AppTheme.error);
+    } finally {
+      await _waitForCooldown(cooldown);
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  Future<void> _handleStatusTap(
+    BuildContext context,
+    WeightProvider provider,
+  ) async {
+    if (_isBluetoothBusy) return;
+    final cooldown = Stopwatch()..start();
+    setState(() => _isBluetoothBusy = true);
+    try {
+      await _onStatusTap(context, provider);
+    } finally {
+      await _waitForCooldown(cooldown);
+      if (mounted) setState(() => _isBluetoothBusy = false);
+    }
+  }
+
+  Future<void> _saveMeasurement(WeightProvider weightData) async {
+    if (_isSaving) return;
+    final cooldown = Stopwatch()..start();
+    setState(() => _isSaving = true);
+
+    try {
+      if (weightData.currentWeight == 0) {
+        _showMessage('❌ ไม่สามารถบันทึกได้!', AppTheme.error);
+        return;
+      }
+
+      await weightData.saveCurrentData();
+      _showMessage(
+        '✅ บันทึกข้อมูลลงฐานข้อมูลเรียบร้อย!',
+        AppTheme.success,
+      );
+    } catch (e) {
+      _showMessage('❌ เกิดข้อผิดพลาด: $e', AppTheme.error);
+    } finally {
+      await _waitForCooldown(cooldown);
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   Future<void> _onStatusTap(BuildContext context, WeightProvider provider) async {
     if (provider.isConnected) {
@@ -44,53 +125,92 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    // ยังไม่เชื่อมต่อ -> สแกนหา ESP32 BLE แล้วเปิด dialog เลือกอุปกรณ์
-    await provider.getPairedDevices();
-    if (!context.mounted) return;
-
-    showDialog(
+    // เปิด dialog ทันที แล้วให้รายการอุปกรณ์อัปเดตสดระหว่างสแกน
+    final scanFuture = provider.getPairedDevices();
+    await showDialog<void>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text("เลือกอุปกรณ์ ESP32"),
           content: SizedBox(
             width: double.maxFinite,
-            child: provider.pairedDevices.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      "ยังไม่พบ ESP32_SmartScale_BLE\nเปิด ESP32 และ Bluetooth แล้วลองแตะสถานะอีกครั้ง (ไม่ต้องจับคู่ผ่าน Settings)",
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: provider.pairedDevices.length,
-                    itemBuilder: (context, index) {
-                      final BluetoothDevice device = provider.pairedDevices[index];
-                      return ListTile(
-                        leading: const Icon(Icons.bluetooth),
-                        title: Text(device.platformName.isNotEmpty
-                            ? device.platformName
-                            : "อุปกรณ์ไม่ทราบชื่อ"),
-                        subtitle: Text(device.remoteId.str),
-                        onTap: () async {
-                          Navigator.pop(context); // ปิดหน้าต่างเลือกอุปกรณ์
-                          
-                          // 🟢 รอให้เชื่อมต่อให้เสร็จสิ้น
-                          await provider.connectToDevice(device);
-                          
-                          // 🟢 ถ้าเชื่อมต่อสำเร็จ ให้เด้ง Popup นำทางทันที
-                          if (provider.isConnected && context.mounted) {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false, // บังคับไม่ให้กดปิดนอกกรอบ
-                              builder: (context) => const MeasurementFlowDialog(),
-                            );
-                          }
-                        },
+            child: Consumer<WeightProvider>(
+              builder: (context, liveProvider, _) {
+                return FutureBuilder<void>(
+                  future: scanFuture,
+                  builder: (context, snapshot) {
+                    final devices = liveProvider.pairedDevices;
+
+                    if (devices.isEmpty &&
+                        snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(
+                              color: AppTheme.primary,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              "กำลังค้นหา ESP32...\nกรุณาเปิดอุปกรณ์และรอสักครู่",
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       );
-                    },
-                  ),
+                    }
+
+                    if (devices.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          "ยังไม่พบ ESP32_Health หรือ ESP32_SmartScale_BLE\n"
+                          "ตรวจสอบว่าเปิด ESP32, Bluetooth และสิทธิ์อุปกรณ์ใกล้เคียงแล้ว",
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: devices.length,
+                      itemBuilder: (context, index) {
+                        final BluetoothDevice device = devices[index];
+                        return ListTile(
+                          leading: const Icon(
+                            Icons.bluetooth,
+                            color: AppTheme.primary,
+                          ),
+                          title: Text(
+                            device.platformName.isNotEmpty
+                                ? device.platformName
+                                : "อุปกรณ์ ESP32",
+                          ),
+                          subtitle: Text(device.remoteId.str),
+                          onTap: liveProvider.isConnecting
+                              ? null
+                              : () async {
+                                  Navigator.pop(context);
+                                  await liveProvider.connectToDevice(device);
+
+                                  if (liveProvider.isConnected &&
+                                      this.context.mounted) {
+                                    showDialog(
+                                      context: this.context,
+                                      barrierDismissible: false,
+                                      builder: (context) =>
+                                          const MeasurementFlowDialog(),
+                                    );
+                                  }
+                                },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ),
           actions: [
             TextButton(
@@ -121,7 +241,9 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           children: [
             GestureDetector(
-              onTap: () => _onStatusTap(context, weightData),
+              onTap: _isBluetoothBusy
+                  ? null
+                  : () => _handleStatusTap(context, weightData),
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -220,55 +342,8 @@ class _HomePageState extends State<HomePage> {
               children: [
                 ElevatedButton(
                   // 2. ถ้า _isSaving เป็น true ให้ปิดปุ่ม (ตั้งค่าเป็น null)
-                  onPressed: _isSaving
-                      ? null
-                      : () async {
-                          if (weightData.currentWeight == 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('❌ ไม่สามารถบันทึกได้!'),
-                                backgroundColor: AppTheme.error,
-                              ),
-                            );
-                            return;
-                          }
-
-                          // 3. ล็อคปุ่ม
-                          setState(() {
-                            _isSaving = true;
-                          });
-
-                          try {
-                            // บันทึกข้อมูล
-                            await weightData.saveCurrentData();
-                            
-                            // เพิ่มการดีเลย์ 1.5 วินาที เพื่อกันการกดรัว
-                            await Future.delayed(const Duration(milliseconds: 1500));
-
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('✅ บันทึกข้อมูลลงฐานข้อมูลเรียบร้อย!'),
-                                backgroundColor: AppTheme.success,
-                              ),
-                            );
-                          } catch (e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('❌ เกิดข้อผิดพลาด: $e'),
-                                backgroundColor: AppTheme.error,
-                              ),
-                            );
-                          } finally {
-                            // 4. ปลดล็อคปุ่มเสมอ
-                            if (mounted) {
-                              setState(() {
-                                _isSaving = false;
-                              });
-                            }
-                          }
-                        },
+                  onPressed:
+                      _isSaving ? null : () => _saveMeasurement(weightData),
                   // 5. แสดงวงกลมโหลดสลับกับข้อความ Save
                   child: _isSaving
                       ? const SizedBox(
@@ -283,12 +358,29 @@ class _HomePageState extends State<HomePage> {
                           style: TextStyle(color: AppTheme.success),
                         ),
                 ),
-                ElevatedButton(
-                  onPressed: () {},
-                  child: const Text(
-                    "Delete",
-                    style: TextStyle(color: AppTheme.error),
+                ElevatedButton.icon(
+                  onPressed: isConnected && !_isRefreshing
+                      ? _restartMeasurement
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.refreshButton,
+                    foregroundColor: AppTheme.refreshButtonForeground,
+                    disabledBackgroundColor:
+                        AppTheme.refreshButton.withOpacity(0.35),
+                    disabledForegroundColor:
+                        AppTheme.refreshButtonForeground,
                   ),
+                  icon: _isRefreshing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.refreshButtonForeground,
+                          ),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: Text(_isRefreshing ? "กำลังเริ่มใหม่" : "Refresh"),
                 ),
               ],
             ),

@@ -10,6 +10,8 @@ class AppTheme {
   static const Color success = Colors.green;
   static const Color warning = Colors.orange;
   static const Color error = Colors.red;
+  static const Color refreshButton = Color(0xFF2196F3);
+  static const Color refreshButtonForeground = Colors.white;
   
   static const Color cardCyan = Color(0xFF80F0F0);
   static const Color cardOrangeLight = Color(0xFFFFF4E6);
